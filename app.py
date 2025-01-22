@@ -25,7 +25,7 @@ HTML_TEMPLATE = """
        label, input, textarea, button { display: block; margin: 10px 0; }
        #result { margin-top: 20px; }
        .result-section { border: 1px solid #ccc; padding: 10px; margin-top: 10px; }
-       pre { background-color: #f8f8f8; padding: 10px; }
+       pre { background-color: #f8f8f8; padding: 10px; border-radius: 5px; overflow-x: auto; font-family: monospace; }
     </style>
 </head>
 <body>
@@ -109,8 +109,8 @@ HTML_TEMPLATE = """
             <h2>Cross-Reference Check</h2>
             <p><strong>Verified By:</strong> ${
               data.cross_check.verified_by 
-              ? data.cross_check.verified_by.join(', ') 
-              : 'None'
+                ? data.cross_check.verified_by.join(', ') 
+                : 'None'
             }</p>
             <p><strong>Explanation:</strong> ${data.cross_check.explanation}</p>
           </div>
@@ -119,15 +119,40 @@ HTML_TEMPLATE = """
         // Debug info
         let debugSection = '';
         if (data.classification.raw_output) {
-            debugSection = `
-            <div class="result-section">
-              <h2>Model Raw Output (Gemini or other LLM)</h2>
-              <pre>${data.classification.raw_output}</pre>
-            </div>`;
+            try {
+                // 1) Remove code fences: ```json ... ```
+                let cleanedOutput = data.classification.raw_output
+                  .replace(/```json\s*/g, '') // remove ```json
+                  .replace(/```/g, '')        // remove remaining ```
+                  .trim();
+
+                // 2) Parse the cleaned string
+                let rawJson = JSON.parse(cleanedOutput);
+
+                // 3) Format it for display
+                let formattedRawOutput = JSON.stringify(rawJson, null, 2);
+
+                debugSection = `
+                <div class="result-section">
+                  <h2>Model Raw Output (Gemini or other LLM)</h2>
+                  <p><strong>Label:</strong> ${rawJson.label || "N/A"}</p>
+                  <p><strong>Rationale:</strong> ${rawJson.rationale || "N/A"}</p>
+
+                  <h3>Full JSON</h3>
+                  <pre>${formattedRawOutput}</pre>
+                </div>`;
+            } catch (e) {
+                // Fallback if parsing fails
+                debugSection = `
+                <div class="result-section">
+                  <h2>Model Raw Output (Gemini or other LLM)</h2>
+                  <p style="color:red;">JSON parse error: ${e.message}</p>
+                  <h3>Raw Output</h3>
+                  <pre>${data.classification.raw_output}</pre>
+                </div>`;
+            }
         } else if (data.classification.full_result) {
-            let fullResult = JSON.stringify(
-                data.classification.full_result, null, 2
-            );
+            let fullResult = JSON.stringify(data.classification.full_result, null, 2);
             debugSection = `
             <div class="result-section">
               <h2>Debug Info (HF Zero-shot Output)</h2>
@@ -141,7 +166,6 @@ HTML_TEMPLATE = """
 </body>
 </html>
 """
-
 
 @app.route("/")
 def home():
